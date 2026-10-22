@@ -1,0 +1,109 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  azureSubscription: 'Azure-Service-Connection'
+  dockerRegistryServiceConnection: 'ACR-Service-Connection'
+  containerRegistry: 'enterprisejava.azurecr.io'
+  imageRepository: 'order-service'
+  webAppName: 'enterprise-order-service'
+  vmImageName: 'ubuntu-latest'
+
+stages:
+  - stage: Build
+    displayName: Build & Push
+    jobs:
+      - job: BuildAndPush
+        pool:
+          vmImage: $(vmImageName)
+        steps:
+          - task: JavaToolInstaller@0
+            displayName: 'Set Java 21'
+            inputs:
+              versionSpec: '21'
+              jdkArchitectureOption: 'x64'
+              jdkSourceOption: 'PreInstalled'
+
+          - task: Maven@4
+            displayName: 'Maven Build & Test'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              goals: 'clean test'
+
+          - task: Docker@2
+            displayName: 'Log in to ACR'
+            inputs:
+              command: login
+              containerRegistry: $(dockerRegistryServiceConnection)
+
+          - task: Docker@2
+            displayName: 'Build and Push Docker Image'
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository)
+              dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                latest
+                $(Build.BuildId)
+
+  - stage: DeployDev
+    displayName: 'Deploy to Dev Slot'
+    dependsOn: Build
+    jobs:
+      - deployment: DeployDevJob
+        environment: 'dev'
+        pool:
+          vmImage: $(vmImageName)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureWebAppContainer@1
+                  displayName: 'Deploy to Dev'
+                  inputs:
+                    azureSubscription: $(azureSubscription)
+                    appName: $(webAppName)
+                    slotName: 'dev'
+                    imageName: '$(containerRegistry)/$(imageRepository):$(Build.BuildId)'
+
+  - stage: DeployStaging
+    displayName: 'Deploy to Staging Slot'
+    dependsOn: DeployDev
+    jobs:
+      - deployment: DeployStagingJob
+        environment: 'staging'
+        pool:
+          vmImage: $(vmImageName)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureWebAppContainer@1
+                  displayName: 'Deploy to Staging'
+                  inputs:
+                    azureSubscription: $(azureSubscription)
+                    appName: $(webAppName)
+                    slotName: 'staging'
+                    imageName: '$(containerRegistry)/$(imageRepository):$(Build.BuildId)'
+
+  - stage: DeployProduction
+    displayName: 'Deploy to Production'
+    dependsOn: DeployStaging
+    jobs:
+      - deployment: DeployProdJob
+        environment: 'production'
+        pool:
+          vmImage: $(vmImageName)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureWebAppContainer@1
+                  displayName: 'Deploy to Production'
+                  inputs:
+                    azureSubscription: $(azureSubscription)
+                    appName: $(webAppName)
+                    imageName: '$(containerRegistry)/$(imageRepository):$(Build.BuildId)'
