@@ -39,12 +39,12 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
-          IMAGE_URI="$REGISTRY_NAME/$IMAGE_NAME:${{ github.sha }}"
-          LATEST_URI="$REGISTRY_NAME/$IMAGE_NAME:latest"
-          
+          IMAGE_URI="${{ env.REGISTRY_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          LATEST_URI="${{ env.REGISTRY_NAME }}/${{ env.IMAGE_NAME }}:latest"
+
           echo "Building image: $IMAGE_URI"
           docker build -t $IMAGE_URI -t $LATEST_URI .
-          
+
           echo "Pushing images..."
           docker push $IMAGE_URI
           docker push $LATEST_URI
