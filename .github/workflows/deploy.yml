@@ -39,12 +39,15 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
-          IMAGE_URI="${{ secrets.ACR_LOGIN_SERVER }}/order-service:${{ github.sha }}"
-          LATEST_URI="${{ secrets.ACR_LOGIN_SERVER }}/order-service:latest"
+          IMAGE_URI="$REGISTRY_NAME/$IMAGE_NAME:${{ github.sha }}"
+          LATEST_URI="$REGISTRY_NAME/$IMAGE_NAME:latest"
+          
+          echo "Building image: $IMAGE_URI"
           docker build -t $IMAGE_URI -t $LATEST_URI .
+          
+          echo "Pushing images..."
           docker push $IMAGE_URI
           docker push $LATEST_URI
-
   deploy-dev:
     needs: build-and-push
     runs-on: ubuntu-latest
