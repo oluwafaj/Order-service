@@ -11,7 +11,7 @@ permissions:
 env:
   REGISTRY_NAME: enterprisejava.azurecr.io
   IMAGE_NAME: order-service
-  APP_NAME: enterprise-order-service
+  APP_NAME: enterprise-java
 
 jobs:
   build-and-push:
