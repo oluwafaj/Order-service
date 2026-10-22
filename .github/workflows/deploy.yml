@@ -8,7 +8,7 @@ permissions:
   contents: read
   id-token: write
 
-variables:
+env:
   REGISTRY_NAME: enterprisejava.azurecr.io
   IMAGE_NAME: order-service
   APP_NAME: enterprise-order-service
