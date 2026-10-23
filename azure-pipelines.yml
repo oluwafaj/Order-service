@@ -6,7 +6,7 @@ trigger:
 
 variables:
   # Azure DevOps Connections & Resource Identifiers
-  azureSubscription: 'ACR-Service-Connection'        # Name of your ARM Service Connection
+  azureSubscription: 'ACR-Service-Order'        # Name of your ARM Service Connection
   acrServiceConnection: 'acr-orderservice' # Name of your Docker/ACR Service Connection
   
   # App & Registry Details
