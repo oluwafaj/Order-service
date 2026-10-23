@@ -12,7 +12,7 @@ variables:
   # App & Registry Details
   acrHost: 'enterprisejava.azurecr.io'
   imageName: 'order-service'
-  appName: 'order-service'                              # App Service name set to order-service
+  appName: 'order-service'                              
   
   # Agent & Environment
   vmImageName: 'ubuntu-latest'
