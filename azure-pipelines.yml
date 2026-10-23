@@ -6,8 +6,8 @@ trigger:
 
 variables:
   # Azure DevOps Connections & Resource Identifiers
-  azureSubscription: 'azure-service-connection'        # Name of your ARM Service Connection
-  acrServiceConnection: 'enterprisejava-acr-connection' # Name of your Docker/ACR Service Connection
+  azureSubscription: 'ACR-Service-Connection'        # Name of your ARM Service Connection
+  acrServiceConnection: 'acr-serviceorder' # Name of your Docker/ACR Service Connection
   
   # App & Registry Details
   acrHost: 'enterprisejava.azurecr.io'
