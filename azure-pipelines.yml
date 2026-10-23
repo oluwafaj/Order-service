@@ -2,108 +2,147 @@ trigger:
   branches:
     include:
       - main
+      - develop
 
 variables:
-  azureSubscription: 'Azure-Service-Connection'
-  dockerRegistryServiceConnection: 'ACR-Service-Connection'
-  containerRegistry: 'enterprisejava.azurecr.io'
-  imageRepository: 'order-service'
-  webAppName: 'enterprise-order-service'
+  # Azure DevOps Connections & Resource Identifiers
+  azureSubscription: 'azure-service-connection'        # Name of your ARM Service Connection
+  acrServiceConnection: 'enterprisejava-acr-connection' # Name of your Docker/ACR Service Connection
+  
+  # App & Registry Details
+  acrHost: 'enterprisejava.azurecr.io'
+  imageName: 'order-service'
+  appName: 'order-service'                              # App Service name set to order-service
+  
+  # Agent & Environment
   vmImageName: 'ubuntu-latest'
 
 stages:
-  - stage: Build
-    displayName: Build & Push
-    jobs:
-      - job: BuildAndPush
-        pool:
-          vmImage: $(vmImageName)
-        steps:
-          - task: JavaToolInstaller@0
-            displayName: 'Set Java 21'
-            inputs:
-              versionSpec: '21'
-              jdkArchitectureOption: 'x64'
-              jdkSourceOption: 'PreInstalled'
+# ====================================================================
+# STAGE 1: Build Java Artifact & Docker Container
+# ====================================================================
+- stage: BuildAndPush
+  displayName: 'Build & Push Container Image'
+  jobs:
+  - job: Build
+    displayName: 'Maven Build & ACR Push'
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: JavaToolInstaller@0
+      displayName: 'Set JDK 21'
+      inputs:
+        versionSpec: '21'
+        jdkArchitectureOption: 'x64'
+        jdkSourceOption: 'PreInstalled'
 
-          - task: Maven@4
-            displayName: 'Maven Build & Test'
-            inputs:
-              mavenPomFile: 'pom.xml'
-              goals: 'clean test'
+    - task: Maven@4
+      displayName: 'Maven Package & Test'
+      inputs:
+        mavenPomFile: 'pom.xml'
+        goals: 'clean package'
+        options: '-DskipTests=false'
+        publishJUnitResults: true
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        javaHomeOption: 'JDKVersion'
+        jdkVersionOption: '1.21'
 
-          - task: Docker@2
-            displayName: 'Log in to ACR'
-            inputs:
-              command: login
-              containerRegistry: $(dockerRegistryServiceConnection)
+    - task: Docker@2
+      displayName: 'Login to ACR'
+      inputs:
+        command: 'login'
+        containerRegistry: '$(acrServiceConnection)'
 
-          - task: Docker@2
-            displayName: 'Build and Push Docker Image'
-            inputs:
-              command: buildAndPush
-              repository: $(imageRepository)
-              dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
-              containerRegistry: $(dockerRegistryServiceConnection)
-              tags: |
-                latest
-                $(Build.BuildId)
+    - task: Docker@2
+      displayName: 'Build and Push Docker Image'
+      inputs:
+        command: 'buildAndPush'
+        repository: '$(imageName)'
+        dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+        containerRegistry: '$(acrServiceConnection)'
+        tags: |
+          $(Build.SourceVersion)
+          latest
 
-  - stage: DeployDev
+# ====================================================================
+# STAGE 2: Deploy to Development Slot
+# ====================================================================
+- stage: DeployDev
+  displayName: 'Deploy to Dev'
+  dependsOn: BuildAndPush
+  condition: succeeded()
+  jobs:
+  - deployment: DeployDevJob
     displayName: 'Deploy to Dev Slot'
-    dependsOn: Build
-    jobs:
-      - deployment: DeployDevJob
-        environment: 'dev'
-        pool:
-          vmImage: $(vmImageName)
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: AzureWebAppContainer@1
-                  displayName: 'Deploy to Dev'
-                  inputs:
-                    azureSubscription: $(azureSubscription)
-                    appName: $(webAppName)
-                    slotName: 'dev'
-                    imageName: '$(containerRegistry)/$(imageRepository):$(Build.BuildId)'
+    environment: 'dev'
+    pool:
+      vmImage: $(vmImageName)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebAppContainer@1
+            displayName: 'Deploy Container to Order Service (Dev Slot)'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              appName: '$(appName)'
+              slotName: 'dev'
+              containers: '$(acrHost)/$(imageName):$(Build.SourceVersion)'
+              appSettings: |
+                -WEBSITES_PORT 8080
+                -WEBSITES_CONTAINER_STARTUP_TIME_LIMIT 230
 
-  - stage: DeployStaging
+# ====================================================================
+# STAGE 3: Deploy to Staging Slot
+# ====================================================================
+- stage: DeployStaging
+  displayName: 'Deploy to Staging'
+  dependsOn: DeployDev
+  condition: succeeded()
+  jobs:
+  - deployment: DeployStagingJob
     displayName: 'Deploy to Staging Slot'
-    dependsOn: DeployDev
-    jobs:
-      - deployment: DeployStagingJob
-        environment: 'staging'
-        pool:
-          vmImage: $(vmImageName)
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: AzureWebAppContainer@1
-                  displayName: 'Deploy to Staging'
-                  inputs:
-                    azureSubscription: $(azureSubscription)
-                    appName: $(webAppName)
-                    slotName: 'staging'
-                    imageName: '$(containerRegistry)/$(imageRepository):$(Build.BuildId)'
+    environment: 'staging'
+    pool:
+      vmImage: $(vmImageName)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebAppContainer@1
+            displayName: 'Deploy Container to Order Service (Staging Slot)'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              appName: '$(appName)'
+              slotName: 'staging'
+              containers: '$(acrHost)/$(imageName):$(Build.SourceVersion)'
+              appSettings: |
+                -WEBSITES_PORT 8080
+                -WEBSITES_CONTAINER_STARTUP_TIME_LIMIT 230
 
-  - stage: DeployProduction
-    displayName: 'Deploy to Production'
-    dependsOn: DeployStaging
-    jobs:
-      - deployment: DeployProdJob
-        environment: 'production'
-        pool:
-          vmImage: $(vmImageName)
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: AzureWebAppContainer@1
-                  displayName: 'Deploy to Production'
-                  inputs:
-                    azureSubscription: $(azureSubscription)
-                    appName: $(webAppName)
-                    imageName: '$(containerRegistry)/$(imageRepository):$(Build.BuildId)'
+# ====================================================================
+# STAGE 4: Deploy to Production
+# ====================================================================
+- stage: DeployProduction
+  displayName: 'Deploy to Production'
+  dependsOn: DeployStaging
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployProductionJob
+    displayName: 'Deploy to Production Slot'
+    environment: 'production'
+    pool:
+      vmImage: $(vmImageName)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebAppContainer@1
+            displayName: 'Deploy Container to Order Service (Production)'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              appName: '$(appName)'
+              containers: '$(acrHost)/$(imageName):$(Build.SourceVersion)'
+              appSettings: |
+                -WEBSITES_PORT 8080
+                -WEBSITES_CONTAINER_STARTUP_TIME_LIMIT 230
