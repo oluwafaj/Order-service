@@ -123,7 +123,7 @@ stages:
 # ====================================================================
 # STAGE 4: Deploy to Production
 # ====================================================================
-- stage: DeployProduction
+- stage: DeployProduction                                # Approver added to production environment
   displayName: 'Deploy to Production'
   dependsOn: DeployStaging
   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
